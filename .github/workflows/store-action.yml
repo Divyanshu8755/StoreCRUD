@@ -1,4 +1,4 @@
-name: Store CRUD Runner (with artifacts)
+name: Store CRUD Runner (safe artifact handling)
 
 on:
   workflow_dispatch:
@@ -21,16 +21,36 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Try to download previous store artifact (if exists)
+      - name: Check if artifact exists in repo (store-artifact)
+        id: check_art
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const name = 'store-artifact';
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const res = await github.rest.actions.listRepoArtifactsForRepo({
+              owner,
+              repo,
+              per_page: 100
+            });
+            const artifacts = res.data.artifacts || [];
+            const found = artifacts.some(a => a.name === name);
+            return found;
+      - name: Debug: artifact check
+        run: echo "artifact_found=${{ steps.check_art.outputs.result }}"
+
+      - name: Download previous store artifact (only if exists)
+        if: ${{ steps.check_art.outputs.result == 'true' }}
         uses: actions/download-artifact@v4
         with:
           name: store-artifact
           path: ./store
-        continue-on-error: true
 
-      - name: Check store restore
+      - name: Show restored files (if any)
         run: |
           if [ -d ./store ] && [ "$(ls -A ./store 2>/dev/null | wc -l)" -gt 0 ]; then
             echo "Restored store files:"
@@ -41,26 +61,48 @@ jobs:
           fi
 
       - name: Make script executable
-        run: |
-          chmod +x ./store_crud.sh || true
+        run: chmod +x ./store_crud.sh || true
 
       - name: Run requested action
+        id: run_action
         env:
           ACTION: ${{ github.event.inputs.action }}
           ID: ${{ github.event.inputs.id }}
           NAME: ${{ github.event.inputs.name }}
           EMAIL: ${{ github.event.inputs.email }}
         run: |
+          echo "Action: $ACTION"
           case "$ACTION" in
-            create) ./store_crud.sh create --name "$NAME" --email "$EMAIL" ;;
-            read)  ./store_crud.sh read "$ID" ;;
-            update) ./store_crud.sh update "$ID" --name "$NAME" --email "$EMAIL" ;;
-            delete) ./store_crud.sh delete "$ID" ;;
-            list) ./store_crud.sh list ;;
-            *) echo "Unknown action: $ACTION"; exit 1 ;;
+            create)
+              ./store_crud.sh create --name "$NAME" --email "$EMAIL"
+              ;;
+            read)
+              ./store_crud.sh read "$ID"
+              ;;
+            update)
+              ./store_crud.sh update "$ID" --name "$NAME" --email "$EMAIL"
+              ;;
+            delete)
+              ./store_crud.sh delete "$ID"
+              ;;
+            list)
+              ./store_crud.sh list
+              ;;
+            *)
+              echo "Unknown action: $ACTION" && exit 1;;
           esac
 
-      - name: Upload updated store as artifact
+      - name: Check whether ./store has files (set output)
+        id: check_store
+        run: |
+          if [ -d ./store ] && [ "$(ls -A ./store 2>/dev/null | wc -l)" -gt 0 ]; then
+            echo "has_files=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_files=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload updated store as artifact (only if non-empty)
+        if: ${{ steps.check_store.outputs.has_files == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: store-artifact
