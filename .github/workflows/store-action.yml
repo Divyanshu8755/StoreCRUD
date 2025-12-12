@@ -1,4 +1,4 @@
-name: Store CRUD Runner
+name: Store CRUD Runner (fixed upload)
 
 on:
   workflow_dispatch:
@@ -21,26 +21,31 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-
       - name: Checkout
         uses: actions/checkout@v4
 
-      # DOWNLOAD: restore previous store folder
-      - name: Download store (if exists)
+      - name: Try to download previous store artifact (if exists)
         uses: actions/download-artifact@v4
         with:
           name: store-artifact
           path: ./store
         continue-on-error: true
 
-      - name: Ensure store folder exists
-        run: mkdir -p ./store
-
-      - name: Show restored files
-        run: ls -la ./store || true
+      - name: Normalize store folder (handle nested store/)
+        run: |
+          mkdir -p ./store
+          # If artifact created nested ./store/store, move files up
+          if [ -d ./store/store ]; then
+            echo "Found nested ./store/store — moving files up"
+            shopt -s dotglob || true
+            mv ./store/store/* ./store/ 2>/dev/null || true
+            rmdir ./store/store || true
+          fi
+          echo "After normalize:"
+          ls -la ./store || true
 
       - name: Make script executable
-        run: chmod +x ./store_crud.sh
+        run: chmod +x ./store_crud.sh || true
 
       - name: Run CRUD Operation
         env:
@@ -49,30 +54,22 @@ jobs:
           NAME: ${{ github.event.inputs.name }}
           EMAIL: ${{ github.event.inputs.email }}
         run: |
+          set -euo pipefail
           echo "Action: $ACTION"
           case "$ACTION" in
-            create)
-              ./store_crud.sh create --name "$NAME" --email "$EMAIL"
-              ;;
-            read)
-              ./store_crud.sh read "$ID"
-              ;;
-            update)
-              ./store_crud.sh update "$ID" --name "$NAME" --email "$EMAIL"
-              ;;
-            delete)
-              ./store_crud.sh delete "$ID"
-              ;;
-            list)
-              ./store_crud.sh list
-              ;;
-            *)
-              echo "Unknown action"; exit 1 ;;
+            create) ./store_crud.sh create --name "$NAME" --email "$EMAIL" ;;
+            read)   ./store_crud.sh read "$ID" ;;
+            update) ./store_crud.sh update "$ID" --name "$NAME" --email "$EMAIL" ;;
+            delete) ./store_crud.sh delete "$ID" ;;
+            list)   ./store_crud.sh list ;;
+            *) echo "Unknown action: $ACTION" && exit 1 ;;
           esac
+          echo "After action, store contains:"
+          ls -la ./store || true
 
-      # UPLOAD: save updated store folder for next run
-      - name: Upload updated store
+      - name: Upload store contents as artifact (upload files inside ./store)
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: store-artifact
-          path: ./store
+          path: ./store/*
