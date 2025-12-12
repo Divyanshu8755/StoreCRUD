@@ -1,0 +1,62 @@
+name: Store CRUD Runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'create|read|update|delete|list'
+        required: true
+        default: 'list'
+      id:
+        description: 'id for read/update/delete'
+        required: false
+        default: ''
+      name:
+        description: 'name (for create/update)'
+        required: false
+        default: ''
+      email:
+        description: 'email (for create/update)'
+        required: false
+        default: ''
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Make script executable and ensure store exists
+        run: |
+          chmod +x ./store_crud.sh || true
+          mkdir -p ./store
+
+      - name: Run requested action
+        env:
+          ACTION: ${{ github.event.inputs.action }}
+          ID: ${{ github.event.inputs.id }}
+          NAME: ${{ github.event.inputs.name }}
+          EMAIL: ${{ github.event.inputs.email }}
+        run: |
+          echo "Action: $ACTION"
+          case "$ACTION" in
+            create)
+              ./store_crud.sh create --name "$NAME" --email "$EMAIL"
+              ;;
+            read)
+              ./store_crud.sh read "$ID"
+              ;;
+            update)
+              ./store_crud.sh update "$ID" --name "$NAME" --email "$EMAIL"
+              ;;
+            delete)
+              ./store_crud.sh delete "$ID"
+              ;;
+            list)
+              ./store_crud.sh list
+              ;;
+            *)
+              echo "Unknown action: $ACTION" && exit 1;;
+          esac
