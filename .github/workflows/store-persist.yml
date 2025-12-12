@@ -1,6 +1,5 @@
 name: Store CRUD Runner (git persistence)
 
-# Manual dispatch
 on:
   workflow_dispatch:
     inputs:
@@ -18,7 +17,6 @@ on:
         required: false
         default: ''
 
-# allow the workflow to push to repo
 permissions:
   contents: write
 
@@ -32,36 +30,27 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Ensure store dir exists
+      - name: Ensure store folders exist
         run: |
           mkdir -p ./store
           mkdir -p ./data/store
 
-      - name: Try to restore persisted store from branch (store-data)
+      - name: Restore persisted store from branch (store-data)
         id: restore
         run: |
-          # Try to fetch the store-data branch; if exists, copy its data into ./store
           set -euo pipefail
+          # Try to fetch the store-data branch; if exists, copy its data into ./store
           git fetch origin store-data || true
-          if git show origin/store-data:README.md >/dev/null 2>&1; then
-            echo "store-data branch exists — checking out tree"
-            # Create temporary worktree to read files without changing current branch
-            TMPDIR=$(mktemp -d)
-            git worktree add "$TMPDIR" origin/store-data
-            if [ -d "$TMPDIR/data/store" ]; then
-              echo "Copying persisted files into ./store"
-              cp -r "$TMPDIR/data/store/"* ./store/ 2>/dev/null || true
-            else
-              echo "No data/store in store-data branch"
-            fi
-            # cleanup
-            git worktree remove "$TMPDIR" --force || true
-            rm -rf "$TMPDIR" || true
-            ls -la ./store || true
+          if git show origin/store-data:./data/store >/dev/null 2>&1; then
+            echo "store-data branch exists — restoring files"
+            # Checkout the tree from the remote branch into working tree
+            git checkout origin/store-data -- data/store || true
+            cp -r data/store/* ./store/ 2>/dev/null || true
           else
             echo "store-data branch not found — starting with empty store/"
-            ls -la ./store || true
           fi
+          echo "After restore, ./store contains:"
+          ls -la ./store || true
 
       - name: Make script executable
         run: chmod +x ./store_crud.sh || true
@@ -83,49 +72,52 @@ jobs:
             list)   ./store_crud.sh list ;;
             *) echo "Unknown action: $ACTION" && exit 1 ;;
           esac
-          echo "After action — store contents:"
+          echo "After action — ./store now contains:"
           ls -la ./store || true
 
-      - name: Persist store files to store-data branch (if changes)
+      - name: Persist store files to store-data branch (if changed)
         id: persist
         run: |
           set -euo pipefail
-          # Make a clean copy of store contents under data/store
+
+          # copy store files into data/store
           rm -rf data/store
           mkdir -p data/store
-          # copy any user_*.txt files (if none present, data/store will be empty)
           shopt -s nullglob || true
           cp ./store/*.txt data/store/ 2>/dev/null || true
-          echo "Data to persist:"
+          echo "Data prepared for commit:"
           ls -la data/store || true
 
-          # Configure git
+          # Configure git for the action
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Create store-data branch if not exists, or switch to it
+          # If store-data branch exists, check it out; otherwise create it
           if git ls-remote --exit-code --heads origin store-data; then
             git checkout store-data
           else
             git checkout -b store-data
           fi
 
-          # Move new data into repo and commit if anything changed
+          # Replace data/store with current content
+          mkdir -p data
+          rm -rf data/store || true
           mkdir -p data/store
-          cp -r data/store/* data/store/ 2>/dev/null || true
-
+          cp -r ./store/*.txt data/store/ 2>/dev/null || true
           git add -A data/store || true
 
-          # If there are changes, commit & push
+          # Commit & push only if changes present
           if git diff --cached --quiet; then
-            echo "No changes to persist — skipping commit"
+            echo "No changes to persist."
             echo "pushed=false" >> $GITHUB_OUTPUT
           else
             git commit -m "Persist store data from workflow run: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-            git push origin store-data
+            git push origin store-data --force
             echo "pushed=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Output result
+      - name: Show final status
         run: |
           echo "Persist pushed: ${{ steps.persist.outputs.pushed || 'false' }}"
+          echo "Contents of data/store on workflow workspace:"
+          ls -la data/store || true
