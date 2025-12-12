@@ -1,4 +1,4 @@
-name: Store CRUD Runner (simple, robust)
+name: Store CRUD Runner
 
 on:
   workflow_dispatch:
@@ -21,62 +21,57 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Try to download previous store artifact (if exists)
+      # DOWNLOAD: restore previous store folder
+      - name: Download store (if exists)
         uses: actions/download-artifact@v4
         with:
           name: store-artifact
           path: ./store
         continue-on-error: true
 
-      - name: Show restored files (if any)
-        run: |
-          if [ -d ./store ] && [ "$(ls -A ./store 2>/dev/null | wc -l)" -gt 0 ]; then
-            echo "Restored store files:"
-            ls -la ./store
-          else
-            echo "No previous store artifact found — starting with empty store/"
-            mkdir -p ./store
-          fi
+      - name: Ensure store folder exists
+        run: mkdir -p ./store
+
+      - name: Show restored files
+        run: ls -la ./store || true
 
       - name: Make script executable
-        run: chmod +x ./store_crud.sh || true
+        run: chmod +x ./store_crud.sh
 
-      - name: Run requested action
+      - name: Run CRUD Operation
         env:
           ACTION: ${{ github.event.inputs.action }}
           ID: ${{ github.event.inputs.id }}
           NAME: ${{ github.event.inputs.name }}
           EMAIL: ${{ github.event.inputs.email }}
         run: |
-          set -euo pipefail
           echo "Action: $ACTION"
           case "$ACTION" in
-            create) ./store_crud.sh create --name "$NAME" --email "$EMAIL" ;;
-            read)   ./store_crud.sh read "$ID" ;;
-            update) ./store_crud.sh update "$ID" --name "$NAME" --email "$EMAIL" ;;
-            delete) ./store_crud.sh delete "$ID" ;;
-            list)   ./store_crud.sh list ;;
-            *) echo "Unknown action: $ACTION" && exit 1 ;;
+            create)
+              ./store_crud.sh create --name "$NAME" --email "$EMAIL"
+              ;;
+            read)
+              ./store_crud.sh read "$ID"
+              ;;
+            update)
+              ./store_crud.sh update "$ID" --name "$NAME" --email "$EMAIL"
+              ;;
+            delete)
+              ./store_crud.sh delete "$ID"
+              ;;
+            list)
+              ./store_crud.sh list
+              ;;
+            *)
+              echo "Unknown action"; exit 1 ;;
           esac
 
-      - name: Upload updated store as artifact (if non-empty)
-        run: |
-          if [ -d ./store ] && [ "$(ls -A ./store 2>/dev/null | wc -l)" -gt 0 ]; then
-            echo "Uploading store-artifact..."
-            ls -la ./store
-            # upload-artifact action requires a separate step using action:
-            echo "store_has_files=true" >> $GITHUB_OUTPUT
-          else
-            echo "store has no files; skipping upload."
-            echo "store_has_files=false" >> $GITHUB_OUTPUT
-          fi
-        id: check_store
-
-      - name: Upload artifact (only when store non-empty)
-        if: ${{ steps.check_store.outputs.store_has_files == 'true' }}
+      # UPLOAD: save updated store folder for next run
+      - name: Upload updated store
         uses: actions/upload-artifact@v4
         with:
           name: store-artifact
