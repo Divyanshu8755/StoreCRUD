@@ -1,0 +1,51 @@
+name: Calculator
+on: 
+  workflow_dispatch:
+    inputs:
+      operation:
+       description: "Operation(sum,subtract,multiply,divison)"
+       required: true
+       default: "sum"
+      num1:
+        description: "Provide first value"
+        required: true
+        default: ""
+      num2:
+        description: "Provide second value"
+        required: true
+        default: ""
+        
+jobs:
+  Calci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Calculator on yml
+        run: |
+          a:${{github.events.inputs.num1}}
+          b=${{github.events.inputs.num2}}
+          op=${{github.evenst.inputs.operation"}}
+
+          case $op in:
+           sum)
+             echo "Result: $((a + b))"
+             ;;
+           subtract)
+             echo "Result: $((a - b))"
+             ;;
+           multiply)
+             echo "Result: $((a * b))"
+             ;;
+           division)
+             if [ "$b" -eq 0 ]; then
+               echo "Error division by zero"
+             else
+               echo "Result: $((a / b))"
+             fi
+             ;;
+           *)
+               echo "Invalid operation"
+               ;;
+          esac
+        
+  
+        
