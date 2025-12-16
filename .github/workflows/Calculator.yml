@@ -23,7 +23,7 @@ jobs:
         run: |
           a:${{github.events.inputs.num1}}
           b=${{github.events.inputs.num2}}
-          op=${{github.evenst.inputs.operation"}}
+          op=${{github.evenst.inputs.operation}}
 
           case $op in:
            sum)
