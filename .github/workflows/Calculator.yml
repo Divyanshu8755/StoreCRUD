@@ -3,9 +3,9 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-       description: "Operation(sum,subtract,multiply,divison)"
-       required: true
-       default: "sum"
+        description: "Operation(sum,subtract,multiply,divison)"
+        required: true
+        default: "sum"
       num1:
         description: "Provide first value"
         required: true
@@ -21,11 +21,11 @@ jobs:
     steps:
       - name: Calculator on yml
         run: |
-          a:${{github.events.inputs.num1}}
-          b=${{github.events.inputs.num2}}
-          op=${{github.evenst.inputs.operation}}
+          a=${{ github.event.inputs.num1 }}
+          b=${{ github.event.inputs.num2 }}
+          op=${{ github.event.inputs.operation }}
 
-          case $op in:
+          case $op in
            sum)
              echo "Result: $((a + b))"
              ;;
